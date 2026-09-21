@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -144,6 +144,8 @@
   .explorer-count{color:var(--muted-2);font-size:12px;white-space:nowrap;}
   .explorer-table-wrap{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;}
   .explorer-table-wrap table{font-size:12px;}
+  .comments-cell{max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .comments-cell:hover{white-space:normal;overflow:visible;text-overflow:clip;}
   .explorer-table-wrap thead th{position:sticky;top:0;background:var(--panel);z-index:1;}
   .explorer-table-wrap tbody tr:hover{background:var(--panel-2);}
   .ent-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;}
@@ -184,8 +186,8 @@
   <div id="sheetSourcePanel">
     <div class="sheet-form">
       <label for="sheetUrlInput">Apps Script Web App URL</label>
-      <input type="text" id="sheetUrlInput" placeholder="https://script.google.com/macros/s/AKfycbxnGoWg5idp37FYmKJCMi5K2Nzvc9dFPMEAajBpjHHeS9G-TMXGSvXCyB1-9RUU3o4q/exec">
-      <div class="sheet-hint">Paste the deployed Web App URL from the Apps Script code below. It's saved in this browser for next time.</div>
+      <input type="text" id="sheetUrlInput" placeholder="https://script.google.com/macros/s/XXXXX/exec">
+      <div class="sheet-hint">This report is pre-configured with your Google Sheet and loads automatically. Only change this if you deploy a new Apps Script URL.</div>
       <button class="btn btn-primary" id="loadSheetBtn" style="align-self:flex-start;margin-top:6px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
         Load Data
@@ -216,6 +218,10 @@
       <div class="brand-sub" id="periodLabel">—</div>
     </div>
     <div class="topbar-actions no-print">
+      <button class="btn" id="syncNowBtn" title="Re-fetch the latest data from your Google Sheet now">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+        <span id="syncBadge">Auto-sync every 5 min</span>
+      </button>
       <button class="btn" id="themeToggleBtn" title="Toggle Light/Night Mode">
         <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         <span id="themeLabel">Night Mode</span>
@@ -348,14 +354,14 @@
       </button>
     </div>
     <div class="explorer-controls">
-      <input type="text" id="explorerSearch" placeholder="Search order ID, remark, status, payment...">
+      <input type="text" id="explorerSearch" placeholder="Search order ID, remark, status, payment, comments...">
       <select id="explorerRmk"><option value="">All Remarks</option></select>
       <span class="explorer-count" id="explorerCount"></span>
     </div>
     <div class="explorer-table-wrap">
       <table id="explorerTable">
         <thead>
-          <tr><th>Entity</th><th>Order ID</th><th>Date</th><th>Week</th><th>Remark</th><th class="num">Qty</th><th class="num">Total</th><th class="num">Invoiced</th><th class="num">Refund</th><th>Payment</th><th>Status</th><th>Delivery</th></tr>
+          <tr><th>Entity</th><th>Order ID</th><th>Date</th><th>Week</th><th>Remark</th><th class="num">Qty</th><th class="num">Total</th><th class="num">Invoiced</th><th class="num">Refund</th><th>Payment</th><th>Status</th><th>Delivery</th><th>Order Comments</th></tr>
         </thead>
         <tbody id="explorerBody"></tbody>
       </table>
@@ -374,7 +380,7 @@
    STATE & THEME MANAGEMENT
    ============================================================ */
 let RAW = { spc: [], sfl: [] };
-let FILTER = { entity:'combined', period:'month', month:null, week:null, day:null, compare:'on', theme:'dark' };
+let FILTER = { entity:'combined', period:'month', month:null, week:null, day:null, compare:'on', theme:'light' };
 let CHARTS = {};
 
 const RMK_COLORS = {
@@ -456,23 +462,33 @@ document.getElementById('sourceTabs').addEventListener('click', e=>{
 /* ============================================================
    GOOGLE SHEET (APPS SCRIPT WEB APP) LOADING
    ============================================================ */
+// Baked into the file so every visitor (any browser, any device, no setup)
+// loads the same live data automatically. Update this if you ever redeploy
+// as a brand-new deployment (a "new version" of the same deployment keeps
+// this URL valid, per the Apps Script instructions in Code.gs).
+const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxnGoWg5idp37FYmKJCMi5K2Nzvc9dFPMEAajBpjHHeS9G-TMXGSvXCyB1-9RUU3o4q/exec';
+
 const SHEET_URL_KEY = 'mgmtReportSheetUrl';
 const AUTO_SYNC_MS = 5 * 60 * 1000; // re-fetch every 5 minutes while the report is open
 let autoSyncTimer = null;
 let lastLoadedUrl = null;
 
 const sheetUrlInput = document.getElementById('sheetUrlInput');
-try{ const saved = localStorage.getItem(SHEET_URL_KEY); if(saved) sheetUrlInput.value = saved; }catch(e){}
+try{
+  const saved = localStorage.getItem(SHEET_URL_KEY);
+  sheetUrlInput.value = saved || DEFAULT_SHEET_URL;
+}catch(e){
+  sheetUrlInput.value = DEFAULT_SHEET_URL;
+}
 
 document.getElementById('loadSheetBtn').addEventListener('click', ()=>loadFromSheet({silent:false}));
 sheetUrlInput.addEventListener('keydown', e=>{ if(e.key==='Enter') loadFromSheet({silent:false}); });
 
-// Auto-load immediately if a URL was already saved from a previous visit.
+// Auto-load immediately on open: a saved URL from a previous visit takes
+// priority (in case someone manually swapped it here), otherwise the
+// baked-in default URL loads automatically so it works out of the box.
 (function autoLoadOnOpen(){
-  try{
-    const saved = localStorage.getItem(SHEET_URL_KEY);
-    if(saved && saved.trim()) loadFromSheet({silent:true});
-  }catch(e){}
+  if(sheetUrlInput.value && sheetUrlInput.value.trim()) loadFromSheet({silent:true});
 })();
 
 function startAutoSync(url){
@@ -519,8 +535,8 @@ function loadFromSheet(opts){
     })
     .catch(ex => {
       console.error(ex);
-      if(syncBadge) syncBadge.textContent = 'Sync failed';
-      if(opts.silent && !opts.background) return; // don't show an error for a silent first-load attempt
+      if(syncBadge) syncBadge.textContent = 'Sync failed — retrying next cycle';
+      if(opts.silent) return; // don't surface an error for a silent first-load or background retry
       status.className = ''; status.textContent = '';
       err.textContent = 'Could not load from that URL. Confirm it is deployed as a Web App with access set to "Anyone", and that it returns JSON (see the Apps Script code provided).';
     });
@@ -542,9 +558,13 @@ fileInput.addEventListener('change', e=>{
   if(e.target.files.length) handleFile(e.target.files[0]);
 });
 document.getElementById('newFileBtn').addEventListener('click', ()=>{
+  if(autoSyncTimer){ clearInterval(autoSyncTimer); autoSyncTimer = null; }
   document.getElementById('app').style.display='none';
   document.getElementById('uploadScreen').style.display='flex';
   fileInput.value='';
+});
+document.getElementById('syncNowBtn').addEventListener('click', ()=>{
+  if(lastLoadedUrl){ sheetUrlInput.value = lastLoadedUrl; loadFromSheet({silent:false, background:true}); }
 });
 
 function handleFile(file){
@@ -592,7 +612,8 @@ function normalizeRows(rows, entity){
     status: r['STATUS'],
     delivery: r['DELIVERY'],
     rmk: (r['RMK']||'UNSPECIFIED').toString().trim(),
-    payment: paymentGroup(r['Payment Method'])
+    payment: paymentGroup(r['Payment Method']),
+    comments: (r['ORDER COMMENTS']||'').toString()
   })).filter(r => r.orderId != null && !isNaN(r.week));
 }
 
@@ -782,8 +803,12 @@ function explorerFilteredRows(rows){
       || (r.rmk||'').toLowerCase().includes(q)
       || (r.status||'').toLowerCase().includes(q)
       || (r.delivery||'').toLowerCase().includes(q)
-      || (r.payment||'').toLowerCase().includes(q);
+      || (r.payment||'').toLowerCase().includes(q)
+      || (r.comments||'').toLowerCase().includes(q);
   });
+}
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function renderExplorer(rows){
   populateExplorerRmkOptions(rows);
@@ -805,6 +830,7 @@ function renderExplorer(rows){
       <td>${r.payment}</td>
       <td>${r.status||'—'}</td>
       <td>${r.delivery||'—'}</td>
+      <td class="comments-cell" title="${escapeHtml(r.comments)}">${escapeHtml(r.comments)||'—'}</td>
     </tr>`).join('');
   document.getElementById('explorerCount').textContent = filtered.length > MAX_RENDER
     ? `Showing first ${fmtInt(MAX_RENDER)} of ${fmtInt(filtered.length)} rows — refine your search or download the CSV for the full set`
@@ -812,11 +838,11 @@ function renderExplorer(rows){
 }
 function downloadCsv(){
   const rows = explorerFilteredRows(filteredRows()).sort((a,b)=> (b.date?b.date.getTime():0) - (a.date?a.date.getTime():0));
-  const headers = ['Entity','Order ID','Date','Week','Month','Remark','Ordered Qty','Total','Invoiced','Refund','Payment','Status','Delivery'];
+  const headers = ['Entity','Order ID','Date','Week','Month','Remark','Ordered Qty','Total','Invoiced','Refund','Payment','Status','Delivery','Order Comments'];
   const esc = v => { const s = (v==null?'':String(v)); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
   const lines = [headers.join(',')].concat(rows.map(r=>[
     r.entity==='spc'?'Sports Corner':'Sports For Less',
-    r.orderId, r.date?dateKey(r.date):'', r.week, r.month, r.rmk, r.qty, r.total, r.invoiced, r.refund, r.payment, r.status, r.delivery
+    r.orderId, r.date?dateKey(r.date):'', r.week, r.month, r.rmk, r.qty, r.total, r.invoiced, r.refund, r.payment, r.status, r.delivery, r.comments
   ].map(esc).join(',')));
   const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
