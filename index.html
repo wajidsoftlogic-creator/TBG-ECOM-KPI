@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Performance Report</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root[data-theme="dark"]{
+    --bg:#0A0F1C;
+    --panel:#101828;
+    --panel-2:#151F33;
+    --line:#243049;
+    --text:#EAF0FA;
+    --muted:#8CA0BE;
+    --muted-2:#5B6E8C;
+    --teal:#2BD9B9;
+    --teal-dim:rgba(43,217,185,.14);
+    --amber:#F0B84B;
+    --amber-dim:rgba(240,184,75,.14);
+    --coral:#F0715B;
+    --coral-dim:rgba(240,113,91,.14);
+    --violet:#8C8CF5;
+    --spc:#2BD9B9;
+    --sfl:#8C8CF5;
+    --radius:14px;
+    --chart-grid:#1B2536;
+    --donut-border:#101828;
+    --datalabel-bg:rgba(234,240,250,.92);
+    --datalabel-color:#0A0F1C;
+  }
+  :root[data-theme="light"]{
+    --bg:#F4F6F9;
+    --panel:#FFFFFF;
+    --panel-2:#EEF2F7;
+    --line:#D1DBE8;
+    --text:#1A2536;
+    --muted:#5B6E8C;
+    --muted-2:#8CA0BE;
+    --teal:#0E9F6E;
+    --teal-dim:rgba(14,159,110,.12);
+    --amber:#D97706;
+    --amber-dim:rgba(217,119,6,.12);
+    --coral:#E02424;
+    --coral-dim:rgba(224,36,36,.12);
+    --violet:#6366F1;
+    --spc:#0E9F6E;
+    --sfl:#6366F1;
+    --radius:14px;
+    --chart-grid:#E5EDF5;
+    --donut-border:#FFFFFF;
+    --datalabel-bg:rgba(26,37,54,.9);
+    --datalabel-color:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;transition:background .2s, color .2s;}
+  h1,h2,h3,.display{font-family:'Sora',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  /* ---------- Upload screen ---------- */
+  #uploadScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;}
+  #uploadScreen .eyebrow{color:var(--teal);letter-spacing:.14em;text-transform:uppercase;font-size:12px;font-weight:600;margin-bottom:14px;}
+  #uploadScreen h1{font-size:38px;font-weight:800;margin:0 0 10px;}
+  #uploadScreen p{color:var(--muted);max-width:520px;margin:0 auto 34px;font-size:15px;line-height:1.6;}
+  .dropzone{width:min(560px,90vw);border:1.5px dashed var(--line);border-radius:var(--radius);padding:44px 28px;cursor:pointer;transition:.2s;background:var(--panel);}
+  .dropzone:hover,.dropzone.drag{border-color:var(--teal);background:var(--teal-dim);}
+  .dropzone svg{width:38px;height:38px;stroke:var(--teal);margin-bottom:14px;}
+  .dropzone .label{font-weight:600;font-size:15px;}
+  .dropzone .sub{color:var(--muted-2);font-size:13px;margin-top:6px;}
+  #fileInput{display:none;}
+  #uploadError{color:var(--coral);margin-top:16px;font-size:13px;min-height:18px;}
+  .source-tabs{display:flex;gap:6px;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:4px;margin-bottom:22px;}
+  .source-tabs button{border:none;background:transparent;color:var(--muted);padding:8px 18px;font-size:13px;font-weight:600;border-radius:6px;}
+  .source-tabs button.active{background:var(--teal);color:#fff;}
+  .sheet-form{width:min(560px,90vw);display:flex;flex-direction:column;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px 26px;}
+  .sheet-form label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-2);font-weight:700;margin-bottom:8px;}
+  .sheet-form input[type=text]{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:11px 13px;font-size:13.5px;color:var(--text);font-family:'JetBrains Mono',monospace;}
+  .sheet-hint{color:var(--muted-2);font-size:12px;margin-top:8px;line-height:1.5;}
+  #sheetStatus{margin-top:10px;font-size:13px;color:var(--muted);min-height:18px;}
+  #sheetStatus.loading{color:var(--amber);}
+  #sheetStatus.ok{color:var(--teal);}
+
+  /* ---------- App shell ---------- */
+  #app{display:none;max-width:1240px;margin:0 auto;padding:24px 28px 80px;}
+  .topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:18px 0 22px;border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap;}
+  .brand-eyebrow{color:var(--teal);letter-spacing:.14em;text-transform:uppercase;font-size:11px;font-weight:700;margin-bottom:6px;}
+  .brand-title{font-size:26px;font-weight:800;margin:0;}
+  .brand-sub{color:var(--muted);font-size:13px;margin-top:4px;}
+  .topbar-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  button{font-family:'Inter',sans-serif;cursor:pointer;border-radius:9px;border:1px solid var(--line);transition:background .2s, border-color .2s;}
+  .btn{background:var(--panel-2);color:var(--text);padding:9px 16px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;}
+  .btn:hover{border-color:var(--muted-2);background:var(--line);}
+  .btn-primary{background:var(--teal);color:#fff;border:none;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn svg{width:15px;height:15px;}
+
+  /* ---------- Filter bar ---------- */
+  .filterbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:26px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
+  .fgroup{display:flex;flex-direction:column;gap:5px;}
+  .fgroup label{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-2);font-weight:700;}
+  .seg{display:flex;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:3px;}
+  .seg button{border:none;background:transparent;color:var(--muted);padding:7px 14px;font-size:12.5px;font-weight:600;border-radius:6px;}
+  .seg button.active{background:var(--teal);color:#fff;}
+  select{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;font-family:'Inter',sans-serif;}
+  .flex-spacer{flex:1;}
+  .asof{color:var(--muted-2);font-size:12px;}
+
+  /* ---------- KPI grid ---------- */
+  .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 18px 16px;position:relative;overflow:hidden;}
+  .kpi .bar{position:absolute;top:0;left:0;height:3px;width:100%;}
+  .kpi-label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;}
+  .kpi-value{font-size:26px;font-weight:800;font-family:'Sora',sans-serif;}
+  .kpi-sub{font-size:12px;color:var(--muted-2);margin-top:6px;}
+  .kpi-sub.pos{color:var(--teal);}
+  .kpi-sub.neg{color:var(--coral);}
+
+  /* ---------- Panels / charts ---------- */
+  .grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-bottom:14px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;}
+  .panel h3{font-size:14px;margin:0 0 4px;font-weight:700;}
+  .panel .phint{font-size:11.5px;color:var(--muted-2);margin-bottom:14px;}
+  .chart-wrap{position:relative;height:260px;}
+  .chart-wrap.short{height:200px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;color:var(--muted-2);text-transform:uppercase;font-size:10.5px;letter-spacing:.05em;font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line);}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);}
+  tr.total-row td{border-top:1.5px solid var(--line);border-bottom:none;font-weight:700;color:var(--text);padding-top:12px;}
+  tr.net-row td{color:var(--teal);font-weight:700;}
+  .num{text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;}
+  .rmk-swatch{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;}
+
+  .entity-pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:20px;}
+  footer.rpt-footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted-2);font-size:11px;display:flex;justify-content:space-between;}
+
+  .explorer-controls{display:flex;gap:10px;align-items:center;margin:14px 0 12px;flex-wrap:wrap;}
+  .explorer-controls input[type=text]{flex:1;min-width:220px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:'Inter',sans-serif;}
+  .explorer-controls select{padding:9px 12px;}
+  .explorer-count{color:var(--muted-2);font-size:12px;white-space:nowrap;}
+  .explorer-table-wrap{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;}
+  .explorer-table-wrap table{font-size:12px;}
+  .explorer-table-wrap thead th{position:sticky;top:0;background:var(--panel);z-index:1;}
+  .explorer-table-wrap tbody tr:hover{background:var(--panel-2);}
+  .ent-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;}
+  .ent-tag.spc{background:var(--teal-dim);color:var(--spc);}
+  .ent-tag.sfl{background:rgba(140,140,245,.14);color:var(--sfl);}
+
+  /* ---------- Print ---------- */
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  @media print{
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    body{background:#FFFFFF !important;color:#1A2536 !important;}
+    #uploadScreen{display:none !important;}
+    .no-print{display:none !important;}
+    #app{display:block !important;max-width:100%;padding:0;}
+    .panel,.kpi{background:#FFFFFF !important;border:1px solid #D1DBE8 !important;box-shadow:none;}
+    .topbar{border-color:#D1DBE8 !important;}
+    .kpi-grid{grid-template-columns:repeat(3,1fr);}
+    .grid-2{grid-template-columns:1.3fr 1fr;page-break-inside:avoid;}
+    .panel{page-break-inside:avoid;}
+    .chart-wrap canvas, .chart-wrap.short canvas{ page-break-inside:avoid; }
+    @page{margin:12mm; size:landscape;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ UPLOAD SCREEN ============ -->
+<div id="uploadScreen">
+  <div class="eyebrow">SPC &middot; SFL Performance Reporting</div>
+  <h1>Weekly Management Report</h1>
+  <p>Load the RMK-tagged order data (Sports Corner + Sports For Less) to generate an interactive, print-ready report with light and night modes.</p>
+
+  <div class="source-tabs" id="sourceTabs">
+    <button data-v="sheet" class="active">Google Sheet</button>
+    <button data-v="file">Upload File</button>
+  </div>
+
+  <div id="sheetSourcePanel">
+    <div class="sheet-form">
+      <label for="sheetUrlInput">Apps Script Web App URL</label>
+      <input type="text" id="sheetUrlInput" placeholder="https://script.google.com/macros/s/XXXXX/exec">
+      <div class="sheet-hint">Paste the deployed Web App URL from the Apps Script code below. It's saved in this browser for next time.</div>
+      <button class="btn btn-primary" id="loadSheetBtn" style="align-self:flex-start;margin-top:6px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+        Load Data
+      </button>
+      <div id="sheetStatus"></div>
+    </div>
+  </div>
+
+  <div id="fileSourcePanel" style="display:none;">
+    <div class="dropzone" id="dropzone">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <div class="label">Drop your .xlsx file here, or click to browse</div>
+      <div class="sub">Expects sheets: SPORTS CORNER, SPORTS FOR LESS</div>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+  </div>
+
+  <div id="uploadError"></div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+
+  <div class="topbar">
+    <div>
+      <div class="brand-eyebrow">Sports Corner &amp; Sports For Less</div>
+      <h1 class="brand-title" id="reportTitle">Performance Report</h1>
+      <div class="brand-sub" id="periodLabel">—</div>
+    </div>
+    <div class="topbar-actions no-print">
+      <button class="btn" id="themeToggleBtn" title="Toggle Light/Night Mode">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <span id="themeLabel">Night Mode</span>
+      </button>
+      <button class="btn" id="newFileBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M12 3v13M8 8l4-5 4 5"/></svg>
+        New file
+      </button>
+      <button class="btn btn-primary" id="printBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+        Print / Save PDF
+      </button>
+    </div>
+  </div>
+
+  <div class="filterbar no-print">
+    <div class="fgroup">
+      <label>Entity</label>
+      <div class="seg" id="entitySeg">
+        <button data-v="combined" class="active">Combined</button>
+        <button data-v="spc">Sports Corner</button>
+        <button data-v="sfl">Sports For Less</button>
+      </div>
+    </div>
+    <div class="fgroup">
+      <label>Period</label>
+      <div class="seg" id="periodSeg">
+        <button data-v="month" class="active">Monthly</button>
+        <button data-v="week">Weekly</button>
+        <button data-v="day">Daily</button>
+      </div>
+    </div>
+    <div class="fgroup" id="monthGroup">
+      <label>Month</label>
+      <select id="monthSelect"></select>
+    </div>
+    <div class="fgroup" id="weekGroup" style="display:none;">
+      <label>Week</label>
+      <select id="weekSelect"></select>
+    </div>
+    <div class="fgroup" id="dayGroup" style="display:none;">
+      <label>Day</label>
+      <select id="daySelect"></select>
+    </div>
+    <div class="fgroup" id="compareGroup">
+      <label>Compare</label>
+      <div class="seg" id="compareSeg">
+        <button data-v="off">Off</button>
+        <button data-v="on" class="active">vs Previous</button>
+      </div>
+    </div>
+    <div class="flex-spacer"></div>
+    <div class="asof" id="genAt"></div>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <!-- Row 1: RMK breakdown + Net sales trend -->
+  <div class="grid-2">
+    <div class="panel">
+      <h3>Order Outcome Breakdown (RMK)</h3>
+      <div class="phint">Share of orders by remark, for the selected period</div>
+      <div class="chart-wrap"><canvas id="rmkDonut"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Net Sales Trend</h3>
+      <div class="phint" id="trendHint">Weekly net sales value, month-to-date</div>
+      <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Row 2: funnel + entity comparison -->
+  <div class="grid-2">
+    <div class="panel">
+      <h3>Order Funnel</h3>
+      <div class="phint">Gross orders &rarr; shipped/cancel outcomes &rarr; net sales</div>
+      <div class="chart-wrap short"><canvas id="funnelChart"></canvas></div>
+    </div>
+    <div class="panel" id="entityPanel">
+      <h3>Entity Comparison</h3>
+      <div class="phint">Net sales value, Sports Corner vs Sports For Less</div>
+      <div class="chart-wrap short"><canvas id="entityChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Comparison row -->
+  <div class="panel" id="comparePanel" style="margin-bottom:14px;">
+    <h3 id="compareTitle">Period Comparison</h3>
+    <div class="phint" id="compareHint">Current period vs. previous period</div>
+    <div class="chart-wrap short"><canvas id="compareChart"></canvas></div>
+  </div>
+
+  <!-- Row 3: payment method -->
+  <div class="grid-2">
+    <div class="panel">
+      <h3>Payment Method Mix</h3>
+      <div class="phint">Share of orders — Cash on Delivery vs Online Pay</div>
+      <div class="chart-wrap short"><canvas id="paymentChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Cancellation Rate by Payment Method</h3>
+      <div class="phint">Does payment type correlate with cancellations?</div>
+      <div class="chart-wrap short"><canvas id="paymentCancelChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- RMK Table -->
+  <div class="panel" style="margin-bottom:14px;">
+    <h3>Remark (RMK) Detail</h3>
+    <div class="phint">Order count, quantity and value by remark — mirrors the source pivot</div>
+    <table id="rmkTable">
+      <thead>
+        <tr><th>Remark</th><th class="num">Orders</th><th class="num">Ordered Qty</th><th class="num">Total (QAR)</th><th class="num">Invoiced (QAR)</th><th class="num">Refund (QAR)</th><th class="num">% of Orders</th></tr>
+      </thead>
+      <tbody id="rmkTableBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Raw Data Explorer -->
+  <div class="panel no-print" style="margin-bottom:14px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+      <div>
+        <h3>Order Data Explorer</h3>
+        <div class="phint">Every uploaded row for the current entity/period filter — search, narrow by remark, and export</div>
+      </div>
+      <button class="btn" id="csvBtn" style="flex-shrink:0;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M12 15l-4-4M12 15l4-4M4 21h16"/></svg>
+        Download CSV
+      </button>
+    </div>
+    <div class="explorer-controls">
+      <input type="text" id="explorerSearch" placeholder="Search order ID, remark, status, payment...">
+      <select id="explorerRmk"><option value="">All Remarks</option></select>
+      <span class="explorer-count" id="explorerCount"></span>
+    </div>
+    <div class="explorer-table-wrap">
+      <table id="explorerTable">
+        <thead>
+          <tr><th>Entity</th><th>Order ID</th><th>Date</th><th>Week</th><th>Remark</th><th class="num">Qty</th><th class="num">Total</th><th class="num">Invoiced</th><th class="num">Refund</th><th>Payment</th><th>Status</th><th>Delivery</th></tr>
+        </thead>
+        <tbody id="explorerBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="rpt-footer">
+    <span>Sports Corner &amp; Sports For Less — Internal Management Report</span>
+    <span id="footerGen"></span>
+  </footer>
+
+</div>
+
+<script>
+/* ============================================================
+   STATE & THEME MANAGEMENT
+   ============================================================ */
+let RAW = { spc: [], sfl: [] };
+let FILTER = { entity:'combined', period:'month', month:null, week:null, day:null, compare:'on', theme:'dark' };
+let CHARTS = {};
+
+const RMK_COLORS = {
+  'NET SALES':'#2BD9B9',
+  'SHIPPED AND CANCELED':'#F0B84B',
+  'SHIPPED AND REFUNDED':'#F0925B',
+  'CANCELED TO PROCESS NEW ORDER':'#8C8CF5',
+  'CANCELED ITEM N/A':'#F0715B',
+  'CANCELED BY CUSTOMER':'#E85D75',
+  'CANCELED TEST ORDER':'#5B6E8C',
+  'CANCELED DUPLICATE':'#6E7FA3',
+  'CANCELED (SKU MSM)':'#B85CF0',
+  'CANCELED (PAYMENT DECLINED)':'#F04B7A',
+  'CANCELED (CUSTOMER NO ANSWER)':'#F0824B',
+  'CANCELED (NO ANSWER)':'#F0824B'
+};
+function rmkColor(r){ return RMK_COLORS[r] || '#5B6E8C'; }
+
+Chart.register(ChartDataLabels);
+Chart.defaults.set('plugins.datalabels', { display:false });
+
+function getComputedCssVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function dataLabelOpts(color, opts){
+  return Object.assign({
+    display:true, color: color || getComputedCssVar('--text'), font:{ size:10.5, weight:700, family:"'JetBrains Mono',monospace" },
+    anchor:'end', align:'top', offset:2
+  }, opts||{});
+}
+
+function isCanceled(r){ return (r||'').toUpperCase().startsWith('CANCELED'); }
+function isNet(r){ return (r||'').toUpperCase() === 'NET SALES'; }
+function isShippedIssue(r){ return (r||'').toUpperCase().startsWith('SHIPPED'); }
+
+const fmtInt = n => Math.round(n).toLocaleString('en-US');
+const fmtQAR = n => 'QAR ' + Math.round(n).toLocaleString('en-US');
+const fmtPct = n => (isFinite(n) ? n.toFixed(1) : '0.0') + '%';
+
+/* ============================================================
+   THEME TOGGLE
+   ============================================================ */
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+const themeIcon = document.getElementById('themeIcon');
+const themeLabel = document.getElementById('themeLabel');
+
+function setTheme(theme){
+  FILTER.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  if(theme === 'light'){
+    themeLabel.textContent = 'Light Mode';
+    themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+  } else {
+    themeLabel.textContent = 'Night Mode';
+    themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+  }
+  if(document.getElementById('app').style.display === 'block'){
+    render(); // Redraw charts with correct palette variables
+  }
+}
+
+themeToggleBtn.addEventListener('click', ()=>{
+  setTheme(FILTER.theme === 'dark' ? 'light' : 'dark');
+});
+
+/* ============================================================
+   SOURCE TABS (Google Sheet vs File Upload)
+   ============================================================ */
+document.getElementById('sourceTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  document.querySelectorAll('#sourceTabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sheetSourcePanel').style.display = btn.dataset.v==='sheet' ? 'block' : 'none';
+  document.getElementById('fileSourcePanel').style.display = btn.dataset.v==='file' ? 'block' : 'none';
+  document.getElementById('uploadError').textContent = '';
+});
+
+/* ============================================================
+   GOOGLE SHEET (APPS SCRIPT WEB APP) LOADING
+   ============================================================ */
+const SHEET_URL_KEY = 'mgmtReportSheetUrl';
+const AUTO_SYNC_MS = 5 * 60 * 1000; // re-fetch every 5 minutes while the report is open
+let autoSyncTimer = null;
+let lastLoadedUrl = null;
+
+const sheetUrlInput = document.getElementById('sheetUrlInput');
+try{ const saved = localStorage.getItem(SHEET_URL_KEY); if(saved) sheetUrlInput.value = saved; }catch(e){}
+
+document.getElementById('loadSheetBtn').addEventListener('click', ()=>loadFromSheet({silent:false}));
+sheetUrlInput.addEventListener('keydown', e=>{ if(e.key==='Enter') loadFromSheet({silent:false}); });
+
+// Auto-load immediately if a URL was already saved from a previous visit.
+(function autoLoadOnOpen(){
+  try{
+    const saved = localStorage.getItem(SHEET_URL_KEY);
+    if(saved && saved.trim()) loadFromSheet({silent:true});
+  }catch(e){}
+})();
+
+function startAutoSync(url){
+  if(autoSyncTimer) clearInterval(autoSyncTimer);
+  autoSyncTimer = setInterval(()=>{ loadFromSheet({silent:true, background:true}); }, AUTO_SYNC_MS);
+}
+
+function loadFromSheet(opts){
+  opts = opts || {};
+  const url = sheetUrlInput.value.trim();
+  const status = document.getElementById('sheetStatus');
+  const err = document.getElementById('uploadError');
+  const syncBadge = document.getElementById('syncBadge');
+  if(!opts.background) err.textContent = '';
+  if(!url){
+    if(!opts.silent){ status.textContent = ''; err.textContent = 'Paste the Apps Script Web App URL first.'; }
+    return;
+  }
+  try{ localStorage.setItem(SHEET_URL_KEY, url); }catch(e){}
+  lastLoadedUrl = url;
+  if(!opts.background){ status.className = 'loading'; status.textContent = 'Loading data from your Google Sheet…'; }
+  if(syncBadge) syncBadge.textContent = 'Syncing…';
+  fetch(url, {method:'GET', cache:'no-store'})
+    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(data => {
+      if(!data || (!data.spc && !data.sfl)) throw new Error('Response did not contain spc/sfl data.');
+      RAW.spc = normalizeRows(data.spc || [], 'spc');
+      RAW.sfl = normalizeRows(data.sfl || [], 'sfl');
+      if(RAW.spc.length===0 && RAW.sfl.length===0){
+        status.className = ''; status.textContent = '';
+        if(!opts.silent) err.textContent = 'Connected, but no data rows were returned. Check the sheet has rows and the script deploy is up to date.';
+        return;
+      }
+      status.className = 'ok';
+      status.textContent = `Loaded ${fmtInt(RAW.spc.length)} Sports Corner + ${fmtInt(RAW.sfl.length)} Sports For Less rows.`;
+      const wasAlreadyOpen = document.getElementById('app').style.display === 'block';
+      initFilters();
+      document.getElementById('uploadScreen').style.display='none';
+      document.getElementById('app').style.display='block';
+      render();
+      startAutoSync(url);
+      const now = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      if(syncBadge) syncBadge.textContent = 'Synced ' + now;
+    })
+    .catch(ex => {
+      console.error(ex);
+      if(syncBadge) syncBadge.textContent = 'Sync failed';
+      if(opts.silent && !opts.background) return; // don't show an error for a silent first-load attempt
+      status.className = ''; status.textContent = '';
+      err.textContent = 'Could not load from that URL. Confirm it is deployed as a Web App with access set to "Anyone", and that it returns JSON (see the Apps Script code provided).';
+    });
+}
+
+/* ============================================================
+   FILE HANDLING
+   ============================================================ */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave', ()=>dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) handleFile(e.target.files[0]);
+});
+document.getElementById('newFileBtn').addEventListener('click', ()=>{
+  document.getElementById('app').style.display='none';
+  document.getElementById('uploadScreen').style.display='flex';
+  fileInput.value='';
+});
+
+function handleFile(file){
+  const err = document.getElementById('uploadError');
+  err.textContent = '';
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try{
+      const wb = XLSX.read(evt.target.result, {type:'array', cellDates:true});
+      const spcSheet = wb.SheetNames.find(n => /sports\s*corner|^spc$/i.test(n));
+      const sflSheet = wb.SheetNames.find(n => /sports\s*for\s*less|^sfl$/i.test(n));
+      if(!spcSheet && !sflSheet){
+        err.textContent = 'Could not find a "SPORTS CORNER" or "SPORTS FOR LESS" sheet in this file.';
+        return;
+      }
+      RAW.spc = spcSheet ? normalizeRows(XLSX.utils.sheet_to_json(wb.Sheets[spcSheet], {defval:null}), 'spc') : [];
+      RAW.sfl = sflSheet ? normalizeRows(XLSX.utils.sheet_to_json(wb.Sheets[sflSheet], {defval:null}), 'sfl') : [];
+      if(RAW.spc.length===0 && RAW.sfl.length===0){
+        err.textContent = 'Sheets were found but contained no data rows.';
+        return;
+      }
+      initFilters();
+      document.getElementById('uploadScreen').style.display='none';
+      document.getElementById('app').style.display='block';
+      render();
+    }catch(ex){
+      console.error(ex);
+      err.textContent = 'Could not read this file. Please confirm it is a valid .xlsx export.';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function normalizeRows(rows, entity){
+  return rows.map(r => ({
+    entity: entity,
+    week: Number(r['WEEK']),
+    month: Number(r['MONTH']),
+    date: parseDate(r['P DATE']),
+    orderId: r['ORDER ID'],
+    total: Number(r['TOTAL'])||0,
+    invoiced: Number(r['INVOICED'])||0,
+    refund: Number(r['REFUND'])||0,
+    qty: Number(r['ORDERED QTY'])||0,
+    status: r['STATUS'],
+    delivery: r['DELIVERY'],
+    rmk: (r['RMK']||'UNSPECIFIED').toString().trim(),
+    payment: paymentGroup(r['Payment Method'])
+  })).filter(r => r.orderId != null && !isNaN(r.week));
+}
+
+function parseDate(v){
+  if(v instanceof Date) return v;
+  if(typeof v === 'number'){ return new Date(Date.UTC(1899,11,30) + v*86400000); }
+  if(typeof v === 'string' && v.trim()){ const d = new Date(v); if(!isNaN(d)) return d; }
+  return null;
+}
+function dateKey(d){ return d ? d.toISOString().slice(0,10) : null; }
+function fmtDateLabel(key){ const d = new Date(key+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+
+function paymentGroup(v){
+  const s = (v||'').toString().trim().toLowerCase();
+  if(!s) return 'Online Pay';
+  if(s.includes('cash') || s === 'cod') return 'COD';
+  return 'Online Pay';
+}
+
+/* ============================================================
+   FILTER UI
+   ============================================================ */
+function initFilters(){
+  const months = [...new Set([...RAW.spc, ...RAW.sfl].map(r=>r.month))].sort((a,b)=>a-b);
+  const monthSel = document.getElementById('monthSelect');
+  monthSel.innerHTML = months.map(m=>`<option value="${m}">${monthName(m)}</option>`).join('');
+  FILTER.month = months[months.length-1];
+  monthSel.value = FILTER.month;
+  refreshWeekOptions();
+
+  document.getElementById('entitySeg').addEventListener('click', e=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    setActive('entitySeg', btn); FILTER.entity = btn.dataset.v; render();
+  });
+  document.getElementById('periodSeg').addEventListener('click', e=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    setActive('periodSeg', btn); FILTER.period = btn.dataset.v;
+    document.getElementById('monthGroup').style.display = FILTER.period==='month' ? 'flex':'none';
+    document.getElementById('weekGroup').style.display = FILTER.period==='week' ? 'flex':'none';
+    document.getElementById('dayGroup').style.display = FILTER.period==='day' ? 'flex':'none';
+    if(FILTER.period==='day') refreshDayOptions();
+    render();
+  });
+  monthSel.addEventListener('change', ()=>{ FILTER.month = Number(monthSel.value); refreshWeekOptions(); refreshDayOptions(); render(); });
+  document.getElementById('weekSelect').addEventListener('change', e=>{ FILTER.week = Number(e.target.value); render(); });
+  document.getElementById('daySelect').addEventListener('change', e=>{ FILTER.day = e.target.value; render(); });
+  document.getElementById('compareSeg').addEventListener('click', e=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    setActive('compareSeg', btn); FILTER.compare = btn.dataset.v; render();
+  });
+  document.getElementById('printBtn').addEventListener('click', ()=>window.print());
+  document.getElementById('csvBtn').addEventListener('click', downloadCsv);
+  document.getElementById('explorerSearch').addEventListener('input', e=>{ EXPLORER.search = e.target.value; renderExplorer(filteredRows()); });
+  document.getElementById('explorerRmk').addEventListener('change', e=>{ EXPLORER.rmk = e.target.value; renderExplorer(filteredRows()); });
+
+  document.getElementById('genAt').textContent = 'Data loaded ' + new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+}
+
+function refreshWeekOptions(){
+  const weeks = [...new Set([...RAW.spc, ...RAW.sfl].filter(r=>r.month===FILTER.month).map(r=>r.week))].sort((a,b)=>a-b);
+  const weekSel = document.getElementById('weekSelect');
+  weekSel.innerHTML = weeks.map(w=>`<option value="${w}">Week ${w}</option>`).join('');
+  FILTER.week = weeks[weeks.length-1];
+  weekSel.value = FILTER.week;
+}
+
+function refreshDayOptions(){
+  const rows = getEntityRows(FILTER.entity).filter(r=>r.month===FILTER.month && r.date);
+  const days = [...new Set(rows.map(r=>dateKey(r.date)))].sort();
+  const daySel = document.getElementById('daySelect');
+  daySel.innerHTML = days.map(d=>`<option value="${d}">${fmtDateLabel(d)}</option>`).join('');
+  FILTER.day = days[days.length-1] || null;
+  if(FILTER.day) daySel.value = FILTER.day;
+}
+
+function setActive(groupId, btn){
+  document.querySelectorAll('#'+groupId+' button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function monthName(m){ return new Date(2026, m-1, 1).toLocaleString('en-US',{month:'long'}); }
+
+/* ============================================================
+   DATA AGGREGATION
+   ============================================================ */
+function getEntityRows(entity){
+  if(entity==='spc') return RAW.spc;
+  if(entity==='sfl') return RAW.sfl;
+  return [...RAW.spc, ...RAW.sfl];
+}
+
+function filteredRows(){
+  const rows = getEntityRows(FILTER.entity);
+  if(FILTER.period==='day') return rows.filter(r => dateKey(r.date) === FILTER.day);
+  if(FILTER.period==='week') return rows.filter(r => r.month === FILTER.month && r.week === FILTER.week);
+  return rows.filter(r => r.month === FILTER.month);
+}
+
+function previousPeriodRows(){
+  const rows = getEntityRows(FILTER.entity);
+  if(FILTER.period==='day'){
+    if(!FILTER.day) return null;
+    const days = [...new Set(rows.filter(r=>r.date).map(r=>dateKey(r.date)))].sort();
+    const idx = days.indexOf(FILTER.day);
+    if(idx <= 0) return null;
+    const prevDay = days[idx-1];
+    return { rows: rows.filter(r=>dateKey(r.date)===prevDay), label: fmtDateLabel(prevDay) };
+  }
+  if(FILTER.period==='week'){
+    const weeksAll = [...new Set(rows.map(r=>r.month*100+r.week))].sort((a,b)=>a-b);
+    const curKey = FILTER.month*100+FILTER.week;
+    const idx = weeksAll.indexOf(curKey);
+    if(idx <= 0) return null;
+    const prevKey = weeksAll[idx-1];
+    const prevMonth = Math.floor(prevKey/100), prevWeek = prevKey%100;
+    return { rows: rows.filter(r=>r.month===prevMonth && r.week===prevWeek), label: `Wk ${prevWeek}` };
+  }
+  const monthsAll = [...new Set(rows.map(r=>r.month))].sort((a,b)=>a-b);
+  const idx = monthsAll.indexOf(FILTER.month);
+  if(idx <= 0) return null;
+  const prevMonth = monthsAll[idx-1];
+  return { rows: rows.filter(r=>r.month===prevMonth), label: monthName(prevMonth) };
+}
+
+function aggregate(rows){
+  const agg = {};
+  let orders=0, qty=0, total=0, invoiced=0, refund=0;
+  rows.forEach(r=>{
+    if(!agg[r.rmk]) agg[r.rmk] = {rmk:r.rmk, orders:0, qty:0, total:0, invoiced:0, refund:0};
+    const a = agg[r.rmk];
+    a.orders++; a.qty+=r.qty; a.total+=r.total; a.invoiced+=r.invoiced; a.refund+=r.refund;
+    orders++; qty+=r.qty; total+=r.total; invoiced+=r.invoiced; refund+=r.refund;
+  });
+  const list = Object.values(agg).sort((a,b)=>b.orders-a.orders);
+  return { byRmk:list, orders, qty, total, invoiced, refund };
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render(){
+  const rows = filteredRows();
+  const agg = aggregate(rows);
+
+  const reportKind = FILTER.period==='month' ? 'Monthly Performance Report' : 'Weekly Performance Report';
+  document.getElementById('reportTitle').textContent = reportKind;
+
+  const periodTxt = FILTER.period==='month'
+    ? `${monthName(FILTER.month)} 2026 &middot; Month to Date`
+    : `${monthName(FILTER.month)} 2026 &middot; Week ${FILTER.week}`;
+  const entityTxt = FILTER.entity==='combined' ? 'Sports Corner + Sports For Less (Combined)'
+    : FILTER.entity==='spc' ? 'Sports Corner' : 'Sports For Less';
+  document.getElementById('periodLabel').innerHTML = `${periodTxt} &nbsp;&middot;&nbsp; ${entityTxt}`;
+  document.title = `${reportKind} — ${FILTER.period==='month' ? monthName(FILTER.month) : 'Wk '+FILTER.week} — ${entityTxt}`;
+  document.getElementById('footerGen').textContent = 'Generated ' + new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+  document.getElementById('trendHint').textContent = FILTER.period==='month'
+    ? 'Weekly net sales value across the selected month'
+    : `Daily context unavailable — showing ${monthName(FILTER.month)} weekly trend for reference`;
+
+  renderKpis(agg);
+  renderRmkTable(agg);
+  renderDonut(agg);
+  renderTrend();
+  renderFunnel(agg);
+  renderEntityComparison();
+  renderPayment(rows);
+  renderComparison(agg);
+  renderExplorer(rows);
+}
+
+/* ============================================================
+   RAW DATA EXPLORER
+   ============================================================ */
+let EXPLORER = { search:'', rmk:'' };
+function populateExplorerRmkOptions(rows){
+  const sel = document.getElementById('explorerRmk');
+  const rmks = [...new Set(rows.map(r=>r.rmk))].sort();
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Remarks</option>' + rmks.map(r=>`<option value="${r}">${r}</option>`).join('');
+  if(rmks.includes(current)) sel.value = current;
+}
+function explorerFilteredRows(rows){
+  const q = EXPLORER.search.trim().toLowerCase();
+  return rows.filter(r=>{
+    if(EXPLORER.rmk && r.rmk !== EXPLORER.rmk) return false;
+    if(!q) return true;
+    return String(r.orderId).toLowerCase().includes(q)
+      || (r.rmk||'').toLowerCase().includes(q)
+      || (r.status||'').toLowerCase().includes(q)
+      || (r.delivery||'').toLowerCase().includes(q)
+      || (r.payment||'').toLowerCase().includes(q);
+  });
+}
+function renderExplorer(rows){
+  populateExplorerRmkOptions(rows);
+  const filtered = explorerFilteredRows(rows).sort((a,b)=> (b.date?b.date.getTime():0) - (a.date?a.date.getTime():0));
+  const body = document.getElementById('explorerBody');
+  const MAX_RENDER = 1000;
+  const shown = filtered.slice(0, MAX_RENDER);
+  body.innerHTML = shown.map(r=>`
+    <tr>
+      <td><span class="ent-tag ${r.entity}">${r.entity==='spc'?'SPC':'SFL'}</span></td>
+      <td>${r.orderId}</td>
+      <td>${r.date ? r.date.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—'}</td>
+      <td>${r.week}</td>
+      <td><span class="rmk-swatch" style="background:${rmkColor(r.rmk)}"></span>${r.rmk}</td>
+      <td class="num">${fmtInt(r.qty)}</td>
+      <td class="num">${fmtQAR(r.total)}</td>
+      <td class="num">${fmtQAR(r.invoiced)}</td>
+      <td class="num">${fmtQAR(r.refund)}</td>
+      <td>${r.payment}</td>
+      <td>${r.status||'—'}</td>
+      <td>${r.delivery||'—'}</td>
+    </tr>`).join('');
+  document.getElementById('explorerCount').textContent = filtered.length > MAX_RENDER
+    ? `Showing first ${fmtInt(MAX_RENDER)} of ${fmtInt(filtered.length)} rows — refine your search or download the CSV for the full set`
+    : `${fmtInt(filtered.length)} order${filtered.length===1?'':'s'}`;
+}
+function downloadCsv(){
+  const rows = explorerFilteredRows(filteredRows()).sort((a,b)=> (b.date?b.date.getTime():0) - (a.date?a.date.getTime():0));
+  const headers = ['Entity','Order ID','Date','Week','Month','Remark','Ordered Qty','Total','Invoiced','Refund','Payment','Status','Delivery'];
+  const esc = v => { const s = (v==null?'':String(v)); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const lines = [headers.join(',')].concat(rows.map(r=>[
+    r.entity==='spc'?'Sports Corner':'Sports For Less',
+    r.orderId, r.date?dateKey(r.date):'', r.week, r.month, r.rmk, r.qty, r.total, r.invoiced, r.refund, r.payment, r.status, r.delivery
+  ].map(esc).join(',')));
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const periodPart = FILTER.period==='day' ? FILTER.day : FILTER.period==='week' ? 'wk'+FILTER.week : monthName(FILTER.month).toLowerCase();
+  a.href = url;
+  a.download = `order-data-${FILTER.entity}-${periodPart}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function renderComparison(agg){
+  destroyChart('compare');
+  const panel = document.getElementById('comparePanel');
+  const prev = FILTER.compare==='on' ? previousPeriodRows() : null;
+  if(!prev){
+    panel.style.display = FILTER.compare==='on' ? 'block' : 'none';
+    if(FILTER.compare==='on'){
+      document.getElementById('compareHint').textContent = 'No prior period found in the uploaded data to compare against.';
+      const ctx = document.getElementById('compareChart');
+      const c = ctx.getContext('2d'); c.clearRect(0,0,ctx.width,ctx.height);
+    }
+    return;
+  }
+  panel.style.display = 'block';
+  const curLabel = FILTER.period==='day' ? fmtDateLabel(FILTER.day) : FILTER.period==='week' ? `Wk ${FILTER.week}` : monthName(FILTER.month);
+  document.getElementById('compareTitle').textContent = `Period Comparison — ${curLabel} vs ${prev.label}`;
+  document.getElementById('compareHint').textContent = 'Net sales value, order count and cancellation rate, current vs. previous period';
+
+  const prevAgg = aggregate(prev.rows);
+  const curNet = agg.byRmk.find(r=>isNet(r.rmk)) || {orders:0,total:0};
+  const prevNet = prevAgg.byRmk.find(r=>isNet(r.rmk)) || {orders:0,total:0};
+  const curCancel = agg.byRmk.filter(r=>isCanceled(r.rmk)).reduce((s,r)=>s+r.orders,0);
+  const prevCancel = prevAgg.byRmk.filter(r=>isCanceled(r.rmk)).reduce((s,r)=>s+r.orders,0);
+  const curCancelRate = agg.orders ? curCancel/agg.orders*100 : 0;
+  const prevCancelRate = prevAgg.orders ? prevCancel/prevAgg.orders*100 : 0;
+
+  const ctx = document.getElementById('compareChart');
+  CHARTS.compare = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels:['Net Sales (QAR '+'000s)','Gross Orders','Cancel Rate %'],
+      datasets:[
+        { label: prev.label, data:[Math.round(prevNet.total/1000), prevAgg.orders, +prevCancelRate.toFixed(1)], backgroundColor:getComputedCssVar('--muted-2'), borderRadius:6, barThickness:26 },
+        { label: curLabel, data:[Math.round(curNet.total/1000), agg.orders, +curCancelRate.toFixed(1)], backgroundColor:getComputedCssVar('--teal'), borderRadius:6, barThickness:26 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:24 } },
+      plugins:{
+        legend:{ position:'top', labels:{ color:getComputedCssVar('--muted'), boxWidth:10, font:{size:11} } },
+        datalabels: dataLabelOpts(getComputedCssVar('--text'), { clamp:true })
+      },
+      scales:{ x:{ ticks:{color:getComputedCssVar('--muted'), font:{size:11}}, grid:{display:false} },
+               y:{ ticks:{color:getComputedCssVar('--muted-2'), font:{size:10.5}}, grid:{color:getComputedCssVar('--chart-grid')}, suggestedMax: Math.max(1, prevAgg.orders, agg.orders, Math.round(prevNet.total/1000), Math.round(curNet.total/1000)) * 1.18 } }
+    },
+    plugins:[ChartDataLabels]
+  });
+}
+
+function renderPayment(rows){
+  destroyChart('payment');
+  destroyChart('paymentCancel');
+  const cod = rows.filter(r=>r.payment==='COD');
+  const online = rows.filter(r=>r.payment==='Online Pay');
+
+  const ctx1 = document.getElementById('paymentChart');
+  CHARTS.payment = new Chart(ctx1, {
+    type:'doughnut',
+    data:{ labels:['Cash on Delivery','Online Pay'], datasets:[{ data:[cod.length, online.length], backgroundColor:[getComputedCssVar('--amber'), getComputedCssVar('--teal')], borderColor:getComputedCssVar('--donut-border'), borderWidth:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{ legend:{ position:'right', labels:{ color:getComputedCssVar('--muted'), boxWidth:10, font:{size:11} } },
+        tooltip:{ callbacks:{ label:c=>`${c.label}: ${c.parsed} orders (${(c.parsed/(rows.length||1)*100).toFixed(1)}%)` } },
+        datalabels: dataLabelOpts(getComputedCssVar('--datalabel-color'), { anchor:'center', align:'center', backgroundColor:getComputedCssVar('--datalabel-bg'), borderRadius:4, padding:{top:2,bottom:2,left:5,right:5},
+          formatter:(v)=>{ const tot=(cod.length+online.length)||1; return v+' ('+(v/tot*100).toFixed(0)+'%)'; } })
+      }
+    },
+    plugins:[ChartDataLabels]
+  });
+
+  const codCancelRate = cod.length ? cod.filter(r=>isCanceled(r.rmk)).length/cod.length*100 : 0;
+  const onlineCancelRate = online.length ? online.filter(r=>isCanceled(r.rmk)).length/online.length*100 : 0;
+  const ctx2 = document.getElementById('paymentCancelChart');
+  CHARTS.paymentCancel = new Chart(ctx2, {
+    type:'bar',
+    data:{ labels:['Cash on Delivery','Online Pay'], datasets:[{ data:[codCancelRate, onlineCancelRate], backgroundColor:[getComputedCssVar('--amber'), getComputedCssVar('--teal')], borderRadius:6, barThickness:44 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:24 } },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>fmtPct(c.parsed.y) } },
+        datalabels: dataLabelOpts(getComputedCssVar('--text'), { formatter:v=>v.toFixed(1)+'%', clamp:true }) },
+      scales:{ x:{ ticks:{color:getComputedCssVar('--muted'), font:{size:12,weight:600}}, grid:{display:false} },
+               y:{ ticks:{color:getComputedCssVar('--muted-2'), font:{size:10.5}, callback:v=>v+'%'}, grid:{color:getComputedCssVar('--chart-grid')}, suggestedMax: Math.max(codCancelRate,onlineCancelRate,1)*1.25 } } },
+    plugins:[ChartDataLabels]
+  });
+}
+
+function renderKpis(agg){
+  const net = agg.byRmk.find(r=>isNet(r.rmk)) || {orders:0,total:0,invoiced:0,qty:0};
+  const canceledOrders = agg.byRmk.filter(r=>isCanceled(r.rmk)).reduce((s,r)=>s+r.orders,0);
+  const shippedIssueOrders = agg.byRmk.filter(r=>isShippedIssue(r.rmk)).reduce((s,r)=>s+r.orders,0);
+  const cancelRate = agg.orders ? (canceledOrders/agg.orders*100) : 0;
+  const successRate = agg.orders ? (net.orders/agg.orders*100) : 0;
+  const grossToNet = agg.total ? (net.total/agg.total*100) : 0;
+  const aov = net.orders ? (net.total/net.orders) : 0;
+  const invoiceRate = agg.total ? (agg.invoiced/agg.total*100) : 0;
+  const refundOfInvoiced = agg.invoiced ? (agg.refund/agg.invoiced*100) : 0;
+
+  const cards = [
+    {label:'Gross Orders', value: fmtInt(agg.orders), sub:`${fmtInt(agg.qty)} units ordered`, color:getComputedCssVar('--teal')},
+    {label:'Ordered Qty', value: fmtInt(agg.qty), sub:`${fmtInt(net.qty)} units in net sales`, color:getComputedCssVar('--violet')},
+    {label:'Net Sales Orders', value: fmtInt(net.orders), sub:`${fmtQAR(net.total)} value`, color:getComputedCssVar('--teal')},
+    {label:'Cancellation Rate', value: fmtPct(cancelRate), sub:`${fmtInt(canceledOrders)} orders canceled`, color:getComputedCssVar('--coral'), cls: cancelRate>25?'neg':''},
+    {label:'Success Rate', value: fmtPct(successRate), sub:'Net sales share of gross orders', color:getComputedCssVar('--teal'), cls: successRate>60?'pos':''},
+    {label:'Gross &rarr; Net Sale', value: fmtPct(grossToNet), sub:`${fmtQAR(agg.total)} gross &rarr; ${fmtQAR(net.total)} net`, color:getComputedCssVar('--amber')},
+    {label:'Avg. Order Value', value: fmtQAR(aov), sub:'Based on net sales orders', color:getComputedCssVar('--violet')},
+    {label:'Invoice Rate', value: fmtPct(invoiceRate), sub:`${fmtQAR(agg.invoiced)} invoiced of total`, color:getComputedCssVar('--amber')},
+    {label:'Refund Rate', value: fmtPct(refundOfInvoiced), sub:`${fmtQAR(agg.refund)} refunded`, color:getComputedCssVar('--coral'), cls: refundOfInvoiced>5?'neg':''}
+  ];
+  document.getElementById('kpiGrid').innerHTML = cards.map(c=>`
+    <div class="kpi">
+      <div class="bar" style="background:${c.color}"></div>
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value">${c.value}</div>
+      <div class="kpi-sub ${c.cls||''}">${c.sub}</div>
+    </div>`).join('');
+}
+
+function renderRmkTable(agg){
+  const body = document.getElementById('rmkTableBody');
+  const rows = [...agg.byRmk].sort((a,b)=>b.total-a.total);
+  body.innerHTML = rows.map(r=>`
+    <tr class="${isNet(r.rmk)?'net-row':''}">
+      <td><span class="rmk-swatch" style="background:${rmkColor(r.rmk)}"></span>${r.rmk}</td>
+      <td class="num">${fmtInt(r.orders)}</td>
+      <td class="num">${fmtInt(r.qty)}</td>
+      <td class="num">${fmtQAR(r.total)}</td>
+      <td class="num">${fmtQAR(r.invoiced)}</td>
+      <td class="num">${fmtQAR(r.refund)}</td>
+      <td class="num">${fmtPct(agg.orders? r.orders/agg.orders*100:0)}</td>
+    </tr>`).join('') + `
+    <tr class="total-row">
+      <td>Grand Total</td>
+      <td class="num">${fmtInt(agg.orders)}</td>
+      <td class="num">${fmtInt(agg.qty)}</td>
+      <td class="num">${fmtQAR(agg.total)}</td>
+      <td class="num">${fmtQAR(agg.invoiced)}</td>
+      <td class="num">${fmtQAR(agg.refund)}</td>
+      <td class="num">100.0%</td>
+    </tr>`;
+}
+
+function destroyChart(key){ if(CHARTS[key]){ CHARTS[key].destroy(); delete CHARTS[key]; } }
+
+function renderDonut(agg){
+  destroyChart('donut');
+  const rows = agg.byRmk.filter(r=>r.orders>0).sort((a,b)=>b.orders-a.orders);
+  const ctx = document.getElementById('rmkDonut');
+  CHARTS.donut = new Chart(ctx, {
+    type:'doughnut',
+    data:{
+      labels: rows.map(r=>r.rmk),
+      datasets:[{ data: rows.map(r=>r.orders), backgroundColor: rows.map(r=>rmkColor(r.rmk)), borderColor:getComputedCssVar('--donut-border'), borderWidth:2 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{
+        legend:{ position:'right', labels:{ color:getComputedCssVar('--muted'), boxWidth:10, font:{size:10.5}, padding:8 } },
+        tooltip:{ callbacks:{ label: c => `${c.label}: ${c.parsed} orders (${(c.parsed/rows.reduce((s,r)=>s+r.orders,0)*100).toFixed(1)}%)` } },
+        datalabels: dataLabelOpts(getComputedCssVar('--datalabel-color'), { anchor:'center', align:'center', backgroundColor:getComputedCssVar('--datalabel-bg'), borderRadius:4, padding:{top:2,bottom:2,left:5,right:5},
+          formatter:(v,ctx)=>{ const tot = rows.reduce((s,r)=>s+r.orders,0); const pct = tot? (v/tot*100):0; return pct<4 ? '' : v+' ('+pct.toFixed(0)+'%)'; } })
+      }
+    },
+    plugins:[ChartDataLabels]
+  });
+}
+
+function renderTrend(){
+  destroyChart('trend');
+  const entityRows = getEntityRows(FILTER.entity).filter(r=>r.month===FILTER.month);
+  const weeks = [...new Set(entityRows.map(r=>r.week))].sort((a,b)=>a-b);
+  const netByWeek = weeks.map(w => entityRows.filter(r=>r.week===w && isNet(r.rmk)).reduce((s,r)=>s+r.total,0));
+  const grossByWeek = weeks.map(w => entityRows.filter(r=>r.week===w).reduce((s,r)=>s+r.total,0));
+  const ctx = document.getElementById('trendChart');
+  CHARTS.trend = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: weeks.map(w=>'Wk '+w),
+      datasets:[
+        { label:'Gross Sales', data: grossByWeek, borderColor:getComputedCssVar('--muted-2'), borderDash:[4,4], tension:.35, fill:false, pointRadius:3 },
+        { label:'Net Sales', data: netByWeek, borderColor:getComputedCssVar('--teal'), backgroundColor:getComputedCssVar('--teal-dim'), tension:.35, fill:true, pointRadius:4, pointBackgroundColor:getComputedCssVar('--teal') }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:22 } },
+      plugins:{ legend:{ position:'top', labels:{ color:getComputedCssVar('--muted'), boxWidth:10, font:{size:10.5} } },
+        tooltip:{ callbacks:{ label: c => `${c.dataset.label}: ${fmtQAR(c.parsed.y)}` } },
+        datalabels: {
+          display: ctx => ctx.datasetIndex===1,
+          color: getComputedCssVar('--text'),
+          font:{ size:10, weight:700, family:"'JetBrains Mono',monospace" },
+          anchor:'end', align:'top', offset:6,
+          formatter: v => v>0 ? fmtQAR(v) : ''
+        }
+      },
+      scales:{
+        x:{ ticks:{ color:getComputedCssVar('--muted-2'), font:{size:11} }, grid:{ color:getComputedCssVar('--chart-grid') } },
+        y:{ ticks:{ color:getComputedCssVar('--muted-2'), font:{size:10.5}, callback:v=>(v/1000)+'k' }, grid:{ color:getComputedCssVar('--chart-grid') } }
+      }
+    },
+    plugins:[ChartDataLabels]
+  });
+}
+
+function renderFunnel(agg){
+  destroyChart('funnel');
+  const net = agg.byRmk.filter(r=>isNet(r.rmk)).reduce((s,r)=>s+r.orders,0);
+  const shippedIssue = agg.byRmk.filter(r=>isShippedIssue(r.rmk)).reduce((s,r)=>s+r.orders,0);
+  const canceled = agg.byRmk.filter(r=>isCanceled(r.rmk)).reduce((s,r)=>s+r.orders,0);
+  const stages = [
+    {label:'Gross Orders', value: agg.orders, color:getComputedCssVar('--muted-2')},
+    {label:'Shipped (Net Sales)', value: net, color:getComputedCssVar('--teal')},
+    {label:'Shipped w/ Issue', value: shippedIssue, color:getComputedCssVar('--amber')},
+    {label:'Canceled Pre-Ship', value: canceled, color:getComputedCssVar('--coral')}
+  ];
+  const ctx = document.getElementById('funnelChart');
+  CHARTS.funnel = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: stages.map(s=>s.label), datasets:[{ data: stages.map(s=>s.value), backgroundColor: stages.map(s=>s.color), borderRadius:6, barThickness:34 }] },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ right:44 } },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>`${fmtInt(c.parsed.x)} orders` } },
+        datalabels: dataLabelOpts(getComputedCssVar('--text'), { anchor:'end', align:'right', clamp:true, formatter:v=>fmtInt(v) }) },
+      scales:{ x:{ ticks:{ color:getComputedCssVar('--muted-2'), font:{size:10.5} }, grid:{ color:getComputedCssVar('--chart-grid') }, suggestedMax: Math.max(1,agg.orders)*1.12 },
+               y:{ ticks:{ color:getComputedCssVar('--muted'), font:{size:11.5, weight:600} }, grid:{ display:false } } }
+    },
+    plugins:[ChartDataLabels]
+  });
+}
+
+function renderEntityComparison(){
+  destroyChart('entity');
+  const panel = document.getElementById('entityPanel');
+  if(FILTER.entity !== 'combined'){
+    panel.querySelector('h3').textContent = 'Remark Value Split';
+    panel.querySelector('.phint').textContent = 'Value share: net sales vs. shipped issues vs. canceled';
+    const rows = filteredRows();
+    const agg = aggregate(rows);
+    const netV = agg.byRmk.filter(r=>isNet(r.rmk)).reduce((s,r)=>s+r.total,0);
+    const shipIssueV = agg.byRmk.filter(r=>isShippedIssue(r.rmk)).reduce((s,r)=>s+r.total,0);
+    const cancelV = agg.byRmk.filter(r=>isCanceled(r.rmk)).reduce((s,r)=>s+r.total,0);
+    const ctx = document.getElementById('entityChart');
+    CHARTS.entity = new Chart(ctx, {
+      type:'bar',
+      data:{ labels:['Net Sales','Shipped Issue','Canceled'], datasets:[{ data:[netV,shipIssueV,cancelV], backgroundColor:[getComputedCssVar('--teal'), getComputedCssVar('--amber'), getComputedCssVar('--coral')], borderRadius:6, barThickness:38 }] },
+      options:{ responsive:true, maintainAspectRatio:false,
+        layout:{ padding:{ top:24 } },
+        plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtQAR(c.parsed.y)}},
+          datalabels: dataLabelOpts(getComputedCssVar('--text'), { formatter:v=>fmtQAR(v), clamp:true })},
+        scales:{ x:{ ticks:{color:getComputedCssVar('--muted'), font:{size:11}}, grid:{display:false} }, y:{ ticks:{color:getComputedCssVar('--muted-2'), font:{size:10.5}, callback:v=>(v/1000)+'k'}, grid:{color:getComputedCssVar('--chart-grid')}, suggestedMax: Math.max(netV,shipIssueV,cancelV,1)*1.2 } } },
+      plugins:[ChartDataLabels]
+    });
+    return;
+  }
+  panel.querySelector('h3').textContent = 'Entity Comparison';
+  panel.querySelector('.phint').textContent = 'Net sales value, Sports Corner vs Sports For Less';
+  const spcRows = RAW.spc.filter(r=>r.month===FILTER.month && (FILTER.period==='month' || r.week===FILTER.week));
+  const sflRows = RAW.sfl.filter(r=>r.month===FILTER.month && (FILTER.period==='month' || r.week===FILTER.week));
+  const spcNet = spcRows.filter(r=>isNet(r.rmk)).reduce((s,r)=>s+r.total,0);
+  const sflNet = sflRows.filter(r=>isNet(r.rmk)).reduce((s,r)=>s+r.total,0);
+  const spcOrders = spcRows.filter(r=>isNet(r.rmk)).length;
+  const sflOrders = sflRows.filter(r=>isNet(r.rmk)).length;
+  const ctx = document.getElementById('entityChart');
+  CHARTS.entity = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:['Sports Corner','Sports For Less'], datasets:[{ label:'Net Sales Value', data:[spcNet, sflNet], backgroundColor:[getComputedCssVar('--spc'), getComputedCssVar('--sfl')], borderRadius:6, barThickness:44 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:26 } },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>`${fmtQAR(c.parsed.y)} · ${c.dataIndex===0?spcOrders:sflOrders} orders` } },
+        datalabels: dataLabelOpts(getComputedCssVar('--text'), { formatter:(v,ctx)=>fmtQAR(v)+' · '+(ctx.dataIndex===0?spcOrders:sflOrders)+' ord.', clamp:true }) },
+      scales:{ x:{ ticks:{color:getComputedCssVar('--muted'), font:{size:12,weight:600}}, grid:{display:false} }, y:{ ticks:{color:getComputedCssVar('--muted-2'), font:{size:10.5}, callback:v=>(v/1000)+'k'}, grid:{color:getComputedCssVar('--chart-grid')}, suggestedMax: Math.max(spcNet,sflNet,1)*1.2 } }
+    },
+    plugins:[ChartDataLabels]
+  });
+}
+
+</script>
+</body>
+</html>
