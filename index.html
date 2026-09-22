@@ -1,3 +1,30 @@
+<!--
+  DEPLOYING THIS AS A GOOGLE APPS SCRIPT WEB APP
+  ------------------------------------------------
+  This file works as-is inside Apps Script's HTML Service. To serve it
+  directly from Apps Script (instead of hosting it somewhere else):
+    1. Open the Apps Script project that already returns your SPC/SFL JSON
+       (the one behind DEFAULT_SHEET_URL below), or create a new one.
+    2. Add a new HTML file to that project, name it "Index", and paste this
+       entire file's contents into it.
+    3. In Code.gs, add:
+         function doGet(e) {
+           return HtmlService.createHtmlOutputFromFile('Index')
+             .setTitle('Weekly Management Report')
+             .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+             .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+         }
+       (If your JSON-returning doGet already exists for the data endpoint,
+       give this report its own separate Apps Script project/deployment so
+       the two doGet functions don't collide.)
+    4. Deploy > New deployment > Web app > Execute as "Me", Who has access
+       "Anyone with the link" (or "Anyone in [org]" if you want it limited
+       to your Google Workspace). Copy the resulting /exec URL — that's the
+       link you share instead of hosting the HTML file elsewhere.
+  Everything else (external chart/xlsx libraries, Google Fonts, fetch() to
+  your data endpoint, localStorage, printing) runs fine inside Apps
+  Script's sandboxed page — no changes were needed for that part.
+-->
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
@@ -61,8 +88,40 @@
   h1,h2,h3,.display{font-family:'Sora',sans-serif;}
   .mono{font-family:'JetBrains Mono',monospace;}
 
+  /* ---------- Password gate ---------- */
+  #passwordScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;}
+  #passwordScreen .eyebrow{color:var(--teal);letter-spacing:.14em;text-transform:uppercase;font-size:12px;font-weight:600;margin-bottom:14px;}
+  #passwordScreen h1{font-size:32px;font-weight:800;margin:0 0 10px;}
+  #passwordScreen p{color:var(--muted);max-width:420px;margin:0 auto 30px;font-size:14px;line-height:1.6;}
+  .pw-form{width:min(360px,90vw);display:flex;flex-direction:column;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px 26px 22px;}
+  .pw-form label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-2);font-weight:700;margin-bottom:8px;}
+  .pw-row{position:relative;display:flex;}
+  .pw-form input[type=password],.pw-form input[type=text]{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:12px 44px 12px 14px;font-size:15px;letter-spacing:.08em;color:var(--text);font-family:'JetBrains Mono',monospace;width:100%;}
+  .pw-form input:focus{outline:none;border-color:var(--teal);}
+  .pw-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--muted-2);padding:6px;display:flex;}
+  .pw-toggle svg{width:17px;height:17px;}
+  .pw-form button.btn-primary{margin-top:14px;justify-content:center;padding:12px 16px;font-size:13.5px;}
+  #pwError{color:var(--coral);margin-top:12px;font-size:12.5px;min-height:16px;}
+  .pw-lock-icon{width:34px;height:34px;stroke:var(--teal);margin-bottom:16px;}
+
+  /* ---------- Loading overlay ---------- */
+  #loadingOverlay{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:999;text-align:center;padding:24px;}
+  #loadingOverlay.show{display:flex;}
+  .spinner{width:46px;height:46px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--teal);animation:spin .8s linear infinite;margin-bottom:22px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .load-title{font-family:'Sora',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px;}
+  .load-sub{color:var(--muted);font-size:13px;max-width:360px;margin-bottom:20px;line-height:1.5;}
+  .progress-track{width:min(320px,80vw);height:6px;border-radius:4px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden;}
+  .progress-fill{height:100%;width:30%;border-radius:4px;background:linear-gradient(90deg,var(--teal),var(--violet));animation:loadbar 1.4s ease-in-out infinite;}
+  @keyframes loadbar{
+    0%{transform:translateX(-100%);width:40%;}
+    50%{width:60%;}
+    100%{transform:translateX(280%);width:40%;}
+  }
+  .load-steps{margin-top:18px;font-size:11.5px;color:var(--muted-2);font-family:'JetBrains Mono',monospace;min-height:16px;}
+
   /* ---------- Upload screen ---------- */
-  #uploadScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;}
+  #uploadScreen{min-height:100vh;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;}
   #uploadScreen .eyebrow{color:var(--teal);letter-spacing:.14em;text-transform:uppercase;font-size:12px;font-weight:600;margin-bottom:14px;}
   #uploadScreen h1{font-size:38px;font-weight:800;margin:0 0 10px;}
   #uploadScreen p{color:var(--muted);max-width:520px;margin:0 auto 34px;font-size:15px;line-height:1.6;}
@@ -171,6 +230,34 @@
 </style>
 </head>
 <body>
+
+<!-- ============ PASSWORD GATE ============ -->
+<div id="passwordScreen">
+  <svg class="pw-lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  <div class="eyebrow">SPC &middot; SFL Performance Reporting</div>
+  <h1>Protected Report</h1>
+  <p>This dashboard contains internal management data. Enter the access password to continue.</p>
+  <form class="pw-form" id="pwForm" autocomplete="off">
+    <label for="pwInput">Password</label>
+    <div class="pw-row">
+      <input type="password" id="pwInput" placeholder="Enter password" autocomplete="off">
+      <button type="button" class="pw-toggle" id="pwToggle" title="Show/hide password">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+    <button type="submit" class="btn btn-primary">Unlock Report</button>
+    <div id="pwError"></div>
+  </form>
+</div>
+
+<!-- ============ LOADING OVERLAY ============ -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="load-title">Loading your report&hellip;</div>
+  <div class="load-sub">Fetching the latest order data from Google Sheets. This usually takes a few seconds &mdash; please keep this tab open.</div>
+  <div class="progress-track"><div class="progress-fill"></div></div>
+  <div class="load-steps" id="loadSteps">Connecting to data source&hellip;</div>
+</div>
 
 <!-- ============ UPLOAD SCREEN ============ -->
 <div id="uploadScreen">
@@ -377,6 +464,94 @@
 
 <script>
 /* ============================================================
+   PASSWORD GATE
+   ============================================================ */
+// Simple front-door gate so a casual visitor can't open the report without
+// the password. This runs entirely in the browser, so it deters casual
+// access but is not strong security — anyone who reads the page source can
+// find the password. Don't put data you consider truly secret behind this
+// alone; the real data access is still controlled by your Apps Script
+// deployment settings.
+const REPORT_PASSWORD = 'TBG456';
+const PW_SESSION_KEY = 'mgmtReportUnlocked';
+
+const passwordScreen = document.getElementById('passwordScreen');
+const pwForm = document.getElementById('pwForm');
+const pwInput = document.getElementById('pwInput');
+const pwError = document.getElementById('pwError');
+const pwToggle = document.getElementById('pwToggle');
+const loadingOverlay = document.getElementById('loadingOverlay');
+const loadSteps = document.getElementById('loadSteps');
+
+pwToggle.addEventListener('click', ()=>{
+  pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+  pwInput.focus();
+});
+
+pwForm.addEventListener('submit', e=>{
+  e.preventDefault();
+  if(pwInput.value === REPORT_PASSWORD){
+    try{ sessionStorage.setItem(PW_SESSION_KEY, '1'); }catch(ex){}
+    unlockReport();
+  }else{
+    pwError.textContent = 'Incorrect password. Please try again.';
+    pwInput.value = '';
+    pwInput.focus();
+  }
+});
+
+function isUnlocked(){
+  try{ return sessionStorage.getItem(PW_SESSION_KEY) === '1'; }catch(ex){ return false; }
+}
+
+function unlockReport(){
+  passwordScreen.style.display = 'none';
+  beginInitialLoad();
+}
+
+// Cycles through friendly status lines while the initial fetch is in
+// flight, purely cosmetic so the user knows the page hasn't frozen.
+let loadStepTimer = null;
+function startLoadSteps(){
+  const steps = ['Connecting to data source…','Fetching Sports Corner rows…','Fetching Sports For Less rows…','Crunching totals…','Almost ready…'];
+  let i = 0;
+  loadSteps.textContent = steps[0];
+  if(loadStepTimer) clearInterval(loadStepTimer);
+  loadStepTimer = setInterval(()=>{
+    i = (i+1) % steps.length;
+    loadSteps.textContent = steps[i];
+  }, 1400);
+}
+function stopLoadSteps(){
+  if(loadStepTimer){ clearInterval(loadStepTimer); loadStepTimer = null; }
+}
+function showLoadingOverlay(){
+  loadingOverlay.classList.add('show');
+  startLoadSteps();
+}
+function hideLoadingOverlay(){
+  loadingOverlay.classList.remove('show');
+  stopLoadSteps();
+}
+
+function beginInitialLoad(){
+  showLoadingOverlay();
+  if(sheetUrlInput.value && sheetUrlInput.value.trim()){
+    loadFromSheet({silent:true, initial:true});
+  }else{
+    hideLoadingOverlay();
+    document.getElementById('uploadScreen').style.display = 'flex';
+  }
+}
+
+// Gate everything behind the password before any data loads.
+if(isUnlocked()){
+  passwordScreen.style.display = 'none';
+}else{
+  passwordScreen.style.display = 'flex';
+}
+
+/* ============================================================
    STATE & THEME MANAGEMENT
    ============================================================ */
 let RAW = { spc: [], sfl: [] };
@@ -481,15 +656,16 @@ try{
   sheetUrlInput.value = DEFAULT_SHEET_URL;
 }
 
-document.getElementById('loadSheetBtn').addEventListener('click', ()=>loadFromSheet({silent:false}));
-sheetUrlInput.addEventListener('keydown', e=>{ if(e.key==='Enter') loadFromSheet({silent:false}); });
+document.getElementById('loadSheetBtn').addEventListener('click', ()=>loadFromSheet({silent:false, initial:true}));
+sheetUrlInput.addEventListener('keydown', e=>{ if(e.key==='Enter') loadFromSheet({silent:false, initial:true}); });
 
-// Auto-load immediately on open: a saved URL from a previous visit takes
+// Auto-load happens once the password gate is passed (see beginInitialLoad,
+// called from unlockReport). A saved URL from a previous visit takes
 // priority (in case someone manually swapped it here), otherwise the
 // baked-in default URL loads automatically so it works out of the box.
-(function autoLoadOnOpen(){
-  if(sheetUrlInput.value && sheetUrlInput.value.trim()) loadFromSheet({silent:true});
-})();
+// If the report is already unlocked for this browser tab (sessionStorage),
+// kick the load off immediately instead of waiting on the password form.
+if(isUnlocked()) beginInitialLoad();
 
 function startAutoSync(url){
   if(autoSyncTimer) clearInterval(autoSyncTimer);
@@ -510,6 +686,7 @@ function loadFromSheet(opts){
   try{ localStorage.setItem(SHEET_URL_KEY, url); }catch(e){}
   lastLoadedUrl = url;
   if(!opts.background){ status.className = 'loading'; status.textContent = 'Loading data from your Google Sheet…'; }
+  if(opts.initial) showLoadingOverlay();
   if(syncBadge) syncBadge.textContent = 'Syncing…';
   fetch(url, {method:'GET', cache:'no-store'})
     .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
@@ -519,23 +696,28 @@ function loadFromSheet(opts){
       RAW.sfl = normalizeRows(data.sfl || [], 'sfl');
       if(RAW.spc.length===0 && RAW.sfl.length===0){
         status.className = ''; status.textContent = '';
+        if(opts.initial){ hideLoadingOverlay(); document.getElementById('uploadScreen').style.display = 'flex'; }
         if(!opts.silent) err.textContent = 'Connected, but no data rows were returned. Check the sheet has rows and the script deploy is up to date.';
         return;
       }
       status.className = 'ok';
       status.textContent = `Loaded ${fmtInt(RAW.spc.length)} Sports Corner + ${fmtInt(RAW.sfl.length)} Sports For Less rows.`;
-      const wasAlreadyOpen = document.getElementById('app').style.display === 'block';
       initFilters();
       document.getElementById('uploadScreen').style.display='none';
       document.getElementById('app').style.display='block';
       render();
       startAutoSync(url);
+      hideLoadingOverlay();
       const now = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
       if(syncBadge) syncBadge.textContent = 'Synced ' + now;
     })
     .catch(ex => {
       console.error(ex);
       if(syncBadge) syncBadge.textContent = 'Sync failed — retrying next cycle';
+      if(opts.initial){
+        hideLoadingOverlay();
+        document.getElementById('uploadScreen').style.display = 'flex';
+      }
       if(opts.silent) return; // don't surface an error for a silent first-load or background retry
       status.className = ''; status.textContent = '';
       err.textContent = 'Could not load from that URL. Confirm it is deployed as a Web App with access set to "Anyone", and that it returns JSON (see the Apps Script code provided).';
@@ -570,6 +752,7 @@ document.getElementById('syncNowBtn').addEventListener('click', ()=>{
 function handleFile(file){
   const err = document.getElementById('uploadError');
   err.textContent = '';
+  showLoadingOverlay();
   const reader = new FileReader();
   reader.onload = evt => {
     try{
@@ -577,12 +760,14 @@ function handleFile(file){
       const spcSheet = wb.SheetNames.find(n => /sports\s*corner|^spc$/i.test(n));
       const sflSheet = wb.SheetNames.find(n => /sports\s*for\s*less|^sfl$/i.test(n));
       if(!spcSheet && !sflSheet){
+        hideLoadingOverlay();
         err.textContent = 'Could not find a "SPORTS CORNER" or "SPORTS FOR LESS" sheet in this file.';
         return;
       }
       RAW.spc = spcSheet ? normalizeRows(XLSX.utils.sheet_to_json(wb.Sheets[spcSheet], {defval:null}), 'spc') : [];
       RAW.sfl = sflSheet ? normalizeRows(XLSX.utils.sheet_to_json(wb.Sheets[sflSheet], {defval:null}), 'sfl') : [];
       if(RAW.spc.length===0 && RAW.sfl.length===0){
+        hideLoadingOverlay();
         err.textContent = 'Sheets were found but contained no data rows.';
         return;
       }
@@ -590,8 +775,10 @@ function handleFile(file){
       document.getElementById('uploadScreen').style.display='none';
       document.getElementById('app').style.display='block';
       render();
+      hideLoadingOverlay();
     }catch(ex){
       console.error(ex);
+      hideLoadingOverlay();
       err.textContent = 'Could not read this file. Please confirm it is a valid .xlsx export.';
     }
   };
